@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 
-const authMiddleware = async (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization
   if (!authHeader) {
     return res.status(401).json({ message: 'Not authorized' })
@@ -15,5 +15,3 @@ const authMiddleware = async (req, res, next) => {
     res.status(401).json({ message: 'Unauthorized' })
   }
 }
-
-export { authMiddleware }
