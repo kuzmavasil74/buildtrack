@@ -65,3 +65,13 @@ export const generateReport = async (req, res) => {
     res.status(500).json({ message: 'Error generating report' })
   }
 }
+export const deleteRecord = async (req, res) => {
+  const { id } = req.params
+  const userId = req.user.id
+  try {
+    await DailyRecord.findOneAndDelete({ _id: id, userId })
+    res.status(200).json({ message: 'Record deleted successfully' })
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting record' })
+  }
+}
