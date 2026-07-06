@@ -55,7 +55,7 @@ export const generateReport = async (req, res) => {
       pdf.text(`Tasks: ${record.tasksCompleted.join(', ')}`)
       pdf.text(
         `Materials: ${record.materialsUsed
-          .map((m) => `${m.name} (${m.quantity} ${m.unit})`)
+          .map((m) => `${m.name || ''} (${m.quantity || 0} ${m.unit || ''})`)
           .join(', ')}`
       )
       pdf.moveDown()
