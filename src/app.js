@@ -1,6 +1,7 @@
 import express from 'express'
 import recordRoutes from './routes/recordRoutes.js'
 import authRoutes from './routes/authRoutes.js'
+import siteRoutes from './routes/siteRoutes.js'
 import cors from 'cors'
 
 const app = express()
@@ -16,5 +17,6 @@ app.use(
 app.use(express.json())
 app.use('/auth', authRoutes)
 app.use('/records', recordRoutes)
+app.use('/sites', siteRoutes)
 
 export default app
