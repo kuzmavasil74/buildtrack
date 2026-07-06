@@ -1,5 +1,5 @@
 import DailyRecord from '../models/DailyRecord.js'
-
+import PDFDocument from 'pdfkit'
 export const createRecord = async (req, res) => {
   try {
     const {
@@ -32,5 +32,31 @@ export const getRecords = async (req, res) => {
     res.status(200).json({ records })
   } catch (error) {
     res.status(500).json({ message: 'Error creating record' })
+  }
+}
+export const generateReport = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const response = await DailyRecord.find({ userId })
+    const pdf = new PDFDocument()
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'attachment; filename=report.pdf')
+    pdf.pipe(res)
+    pdf.fontSize(20).text('BuildTrack Report', { align: 'center' })
+    pdf.moveDown()
+    response.forEach((record) => {
+      pdf
+        .fontSize(12)
+        .text(`Date: ${new Date(record.date).toLocaleDateString()}`)
+      pdf.text(`Site ID: ${record.siteId}`)
+      pdf.text(
+        `Workers: ${record.workersPresent} | Hours: ${record.hoursWorked}`
+      )
+      pdf.text(`Tasks: ${record.tasksCompleted.join(', ')}`)
+      pdf.moveDown()
+    })
+    pdf.end()
+  } catch (error) {
+    res.status(500).json({ message: 'Error generating report' })
   }
 }
