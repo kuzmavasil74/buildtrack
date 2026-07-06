@@ -1,9 +1,11 @@
 import express from 'express'
-import { getUploadUrl } from '../controllers/receiptController.js'
+import multer from 'multer'
+import { uploadReceipt } from '../controllers/receiptController.js'
 import { authMiddleware } from '../middleware/auth.js'
 
 const router = express.Router()
+const upload = multer({ storage: multer.memoryStorage() })
 
-router.post('/upload-url', authMiddleware, getUploadUrl)
+router.post('/upload', authMiddleware, upload.single('receipt'), uploadReceipt)
 
 export default router

@@ -1,23 +1,33 @@
-import { PutObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { Upload } from '@aws-sdk/lib-storage'
 import { s3Client, BUCKET_NAME } from '../config/s3.js'
 import { v4 as uuidv4 } from 'uuid'
 
-export const getUploadUrl = async (req, res) => {
+export const uploadReceipt = async (req, res) => {
   try {
-    const { siteId, fileType } = req.body
-    const key = `receipts/${siteId}/${uuidv4()}.${fileType}`
+    const { siteId } = req.body
+    const file = req.file
 
-    const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-      ContentType: `image/${fileType}`,
+    if (!file) return res.status(400).json({ message: 'No file provided' })
+
+    const key = `receipts/${siteId}/${uuidv4()}-${file.originalname}`
+
+    const upload = new Upload({
+      client: s3Client,
+      params: {
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      },
     })
 
-    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 })
+    await upload.done()
 
-    res.status(200).json({ uploadUrl, key })
+    const fileUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
+
+    res.status(200).json({ message: 'Receipt uploaded', key, fileUrl })
   } catch (error) {
-    res.status(500).json({ message: 'Error generating upload URL' })
+    console.error(error)
+    res.status(500).json({ message: 'Error uploading receipt' })
   }
 }
