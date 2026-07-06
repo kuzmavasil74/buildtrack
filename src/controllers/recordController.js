@@ -53,7 +53,11 @@ export const generateReport = async (req, res) => {
         `Workers: ${record.workersPresent} | Hours: ${record.hoursWorked}`
       )
       pdf.text(`Tasks: ${record.tasksCompleted.join(', ')}`)
-      pdf.text(`Materials: ${record.materialsUsed.join(', ')}`)
+      pdf.text(
+        `Materials: ${record.materialsUsed
+          .map((m) => `${m.name} (${m.quantity} ${m.unit})`)
+          .join(', ')}`
+      )
       pdf.moveDown()
     })
     pdf.end()
