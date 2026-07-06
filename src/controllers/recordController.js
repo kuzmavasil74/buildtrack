@@ -27,3 +27,12 @@ export const createRecord = async (req, res) => {
     res.status(500).json({ message: 'Error creating record' })
   }
 }
+export const getRecords = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const records = await DailyRecord.find({ userId }).sort({ date: -1 })
+    res.status(200).json({ records })
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating record' })
+  }
+}
