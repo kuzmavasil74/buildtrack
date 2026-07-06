@@ -9,6 +9,7 @@ export const register = async (req, res) => {
   console.log('Register attempt:', req.body)
   console.log('PG_HOST:', process.env.PG_HOST)
   console.log('PG_DATABASE:', process.env.PG_DATABASE)
+  console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'set' : 'undefined')
   const { email, password } = req.body
 
   try {
