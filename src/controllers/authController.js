@@ -6,6 +6,9 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 export const register = async (req, res) => {
+  console.log('Register attempt:', req.body)
+  console.log('PG_HOST:', process.env.PG_HOST)
+  console.log('PG_DATABASE:', process.env.PG_DATABASE)
   const { email, password } = req.body
 
   try {
