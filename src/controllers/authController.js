@@ -22,6 +22,7 @@ export const register = async (req, res) => {
       .status(201)
       .json({ message: 'User registered successfully', user: response.rows[0] })
   } catch (error) {
+    console.error('Error registering user:', error.message)
     if (error.code === '23505') {
       return res.status(409).json({ message: 'User already exists' })
     }
