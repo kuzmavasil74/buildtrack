@@ -25,3 +25,16 @@ export const getSites = async (req, res) => {
     res.status(500).json({ message: 'Error getting sites' })
   }
 }
+export const deleteSite = async (req, res) => {
+  const { id } = req.params
+  const userId = req.user.id
+  try {
+    await pool.query(`DELETE FROM sites WHERE id = $1 AND user_id = $2`, [
+      id,
+      userId,
+    ])
+    res.status(200).json({ message: 'Site deleted successfully' })
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting site' })
+  }
+}
