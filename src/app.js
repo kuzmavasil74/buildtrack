@@ -6,12 +6,12 @@ import cors from 'cors'
 const app = express()
 
 app.use(
-  cors({
-    origin: [
-      'http://localhost:5173',
-      'https://buildtrack-frontend-ten.vercel.app',
-    ],
-  })
+  cors()
+
+  // { origin: [
+  //   'http://localhost:5173',
+  //   'https://buildtrack-frontend-ten.vercel.app',
+  // ], }
 )
 app.use(express.json())
 app.use('/auth', authRoutes)
