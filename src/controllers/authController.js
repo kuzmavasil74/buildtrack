@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { pool } from '../config/postgres.js'
 import dotenv from 'dotenv'
+import e from 'express'
 
 dotenv.config()
 
@@ -21,7 +22,7 @@ export const register = async (req, res) => {
     if (error.code === '23505') {
       return res.status(409).json({ message: 'User already exists' })
     }
-    res.status(500).json({ message: 'Error registering user' })
+    res.status(500).json({ message: error.message })
   }
 }
 
@@ -47,6 +48,6 @@ export const login = async (req, res) => {
       res.status(401).json({ message: 'Invalid credentials' })
     }
   } catch (error) {
-    res.status(500).json({ message: 'Error logging in user' })
+    res.status(500).json({ message: error.message })
   }
 }
