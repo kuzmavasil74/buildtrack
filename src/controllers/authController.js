@@ -22,6 +22,7 @@ export const register = async (req, res) => {
     if (error.code === '23505') {
       return res.status(409).json({ message: 'User already exists' })
     }
+    console.error('LOGIN ERROR:', error)
     res.status(500).json({ message: error.message })
   }
 }
@@ -48,6 +49,7 @@ export const login = async (req, res) => {
       res.status(401).json({ message: 'Invalid credentials' })
     }
   } catch (error) {
+    console.error('LOGIN ERROR:', error)
     res.status(500).json({ message: error.message })
   }
 }
