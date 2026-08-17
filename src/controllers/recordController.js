@@ -1,5 +1,10 @@
 import DailyRecord from '../models/DailyRecord.js'
 import PDFDocument from 'pdfkit'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 export const createRecord = async (req, res) => {
   try {
     const {
@@ -38,28 +43,45 @@ export const generateReport = async (req, res) => {
   try {
     const userId = req.user.id
     const response = await DailyRecord.find({ userId })
-    const pdf = new PDFDocument()
+    const fontPath = path.join(__dirname, '../fonts/Roboto-Regular.ttf')
+    const fontBoldPath = path.join(__dirname, '../fonts/Roboto-Bold.ttf')
+
+    const pdf = new PDFDocument({ margin: 40 })
+
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'attachment; filename=report.pdf')
     pdf.pipe(res)
-    pdf.fontSize(20).text('BuildTrack Report', { align: 'center' })
+
+    pdf.registerFont('Roboto', fontPath)
+    pdf.registerFont('Roboto-Bold', fontBoldPath)
+
+    pdf
+      .font('Roboto-Bold')
+      .fontSize(20)
+      .text('BuildTrack Report', { align: 'center' })
     pdf.moveDown()
+
     response.forEach((record) => {
       pdf
-        .fontSize(12)
-        .text(`Date: ${new Date(record.date).toLocaleDateString()}`)
-      pdf.text(`Site ID: ${record.siteId}`)
-      pdf.text(
-        `Workers: ${record.workersPresent} | Hours: ${record.hoursWorked}`
-      )
-      pdf.text(`Tasks: ${record.tasksCompleted.join(', ')}`)
-      pdf.text(
-        `Materials: ${record.materialsUsed
-          .map((m) => `${m.name || ''} (${m.quantity || 0} ${m.unit || ''})`)
-          .join(', ')}`
-      )
+        .font('Roboto-Bold')
+        .fontSize(13)
+        .text(`Дата: ${new Date(record.date).toLocaleDateString('uk-UA')}`)
+      pdf
+        .font('Roboto')
+        .fontSize(11)
+        .text(`Об'єкт ID: ${record.siteId}`)
+        .text(
+          `Працівники: ${record.workersPresent} | Години: ${record.hoursWorked}`
+        )
+        .text(`Завдання: ${record.tasksCompleted.join(', ')}`)
+        .text(
+          `Матеріали: ${record.materialsUsed
+            .map((m) => `${m.name || ''} (${m.quantity || 0} ${m.unit || ''})`)
+            .join(', ')}`
+        )
       pdf.moveDown()
     })
+
     pdf.end()
   } catch (error) {
     res.status(500).json({ message: 'Error generating report' })
