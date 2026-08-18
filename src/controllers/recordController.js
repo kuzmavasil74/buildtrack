@@ -51,7 +51,12 @@ export const generateReport = async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'attachment; filename=report.pdf')
     pdf.pipe(res)
-
+    pdf.on('error', (err) => {
+      console.error('PDF stream error:', err)
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'PDF generation failed' })
+      }
+    })
     pdf.registerFont('Roboto', fontPath)
     pdf.registerFont('Roboto-Bold', fontBoldPath)
 
@@ -84,7 +89,10 @@ export const generateReport = async (req, res) => {
 
     pdf.end()
   } catch (error) {
-    res.status(500).json({ message: 'Error generating report' })
+    console.error('PDF generation error:', error)
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error generating report' })
+    }
   }
 }
 export const deleteRecord = async (req, res) => {
