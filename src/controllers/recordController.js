@@ -43,8 +43,8 @@ export const generateReport = async (req, res) => {
   try {
     const userId = req.user.id
     const response = await DailyRecord.find({ userId })
-    const fontPath = path.join(__dirname, '../fonts/Roboto-Regular.ttf')
-    const fontBoldPath = path.join(__dirname, '../fonts/Roboto-Bold.ttf')
+    const fontPath = path.join(__dirname, '../../fonts/Roboto-Regular.ttf')
+    const fontBoldPath = path.join(__dirname, '../../fonts/Roboto-Bold.ttf')
 
     const pdf = new PDFDocument({ margin: 40 })
 
