@@ -42,7 +42,20 @@ export const getRecords = async (req, res) => {
 export const generateReport = async (req, res) => {
   try {
     const userId = req.user.id
-    const response = await DailyRecord.find({ userId })
+    const { from, to } = req.query
+    const filter = { userId }
+
+    if (from || to) {
+      filter.date = {}
+      if (from) filter.date.$gte = new Date(from)
+      if (to) {
+        const toDate = new Date(to)
+        toDate.setHours(23, 59, 59, 999)
+        filter.date.$lte = toDate
+      }
+    }
+
+    const response = await DailyRecord.find(filter).sort({ date: 1 })
     const fontPath = path.join(__dirname, '../../fonts/Roboto-Regular.ttf')
     const fontBoldPath = path.join(__dirname, '../../fonts/Roboto-Bold.ttf')
 
