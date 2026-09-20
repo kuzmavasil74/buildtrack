@@ -2,6 +2,7 @@ import DailyRecord from '../models/DailyRecord.js'
 import PDFDocument from 'pdfkit'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -16,6 +17,22 @@ export const createRecord = async (req, res) => {
       materialsUsed,
     } = req.body
     const userId = req.user.id
+
+    if (
+      !siteId ||
+      !date ||
+      !Number.isFinite(Number(workersPresent)) ||
+      !Number.isFinite(Number(hoursWorked)) ||
+      !Array.isArray(tasksCompleted)
+    ) {
+      return res.status(400).json({ message: 'Missing or invalid record fields' })
+    }
+
+    const ownsSite = await verifySiteOwnership(siteId, userId)
+    if (!ownsSite) {
+      return res.status(403).json({ message: 'Invalid site' })
+    }
+
     const record = await DailyRecord.create({
       siteId,
       userId,
@@ -27,6 +44,7 @@ export const createRecord = async (req, res) => {
     })
     res.status(201).json({ message: 'Record created successfully', record })
   } catch (error) {
+    console.error('CREATE RECORD ERROR:', error)
     res.status(500).json({ message: 'Error creating record' })
   }
 }

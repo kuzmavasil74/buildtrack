@@ -2,6 +2,7 @@ import { Upload } from '@aws-sdk/lib-storage'
 import { s3Client, BUCKET_NAME } from '../config/s3.js'
 import { v4 as uuidv4 } from 'uuid'
 import Receipt from '../models/Receipt.js'
+import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
 
 export const uploadReceipt = async (req, res) => {
   try {
@@ -10,6 +11,12 @@ export const uploadReceipt = async (req, res) => {
     const userId = req.user.id
 
     if (!file) return res.status(400).json({ message: 'No file provided' })
+    if (!siteId) return res.status(400).json({ message: 'siteId is required' })
+
+    const ownsSite = await verifySiteOwnership(siteId, userId)
+    if (!ownsSite) {
+      return res.status(403).json({ message: 'Invalid site' })
+    }
 
     const key = `receipts/${siteId}/${uuidv4()}-${file.originalname}`
 

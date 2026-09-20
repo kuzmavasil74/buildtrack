@@ -3,6 +3,11 @@ import { pool } from '../config/postgres.js'
 export const createSite = async (req, res) => {
   const { name, address } = req.body
   const userId = req.user.id
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ message: 'Site name is required' })
+  }
+
   try {
     const site = await pool.query(
       `INSERT INTO sites (name, address, user_id) VALUES ($1, $2, $3) RETURNING *`,
