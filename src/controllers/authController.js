@@ -108,7 +108,7 @@ export const forgotPassword = async (req, res) => {
 
       await sendMail({
         to: email,
-        subject: 'BuildTrack password reset',
+        subject: 'Sanjo password reset',
         text: `You requested a password reset.\n\nOpen this link to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
         html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Set a new password</a> (valid for 1 hour).</p><p>If you didn't request this, you can safely ignore this email.</p>`,
       })
