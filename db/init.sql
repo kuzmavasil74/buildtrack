@@ -8,5 +8,14 @@ CREATE TABLE IF NOT EXISTS sites (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   address TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  user_id INTEGER NOT NULL REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS crews (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  members TEXT[] NOT NULL DEFAULT '{}',
   user_id INTEGER NOT NULL REFERENCES users(id)
 );

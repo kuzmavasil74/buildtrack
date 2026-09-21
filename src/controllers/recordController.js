@@ -3,6 +3,8 @@ import PDFDocument from 'pdfkit'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
+import { verifyCrewOwnership } from '../utils/verifyCrewOwnership.js'
+import { getPdfStrings, LOCALE_MAP } from '../i18n/pdf.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -10,6 +12,7 @@ export const createRecord = async (req, res) => {
   try {
     const {
       siteId,
+      crewId,
       date,
       workersPresent,
       hoursWorked,
@@ -33,8 +36,16 @@ export const createRecord = async (req, res) => {
       return res.status(403).json({ message: 'Invalid site' })
     }
 
+    if (crewId) {
+      const ownsCrew = await verifyCrewOwnership(crewId, userId)
+      if (!ownsCrew) {
+        return res.status(403).json({ message: 'Invalid crew' })
+      }
+    }
+
     const record = await DailyRecord.create({
       siteId,
+      crewId: crewId || undefined,
       userId,
       date,
       workersPresent,
@@ -51,16 +62,81 @@ export const createRecord = async (req, res) => {
 export const getRecords = async (req, res) => {
   try {
     const userId = req.user.id
-    const records = await DailyRecord.find({ userId }).sort({ date: -1 })
+    const { siteId } = req.query
+    const filter = { userId }
+    if (siteId) filter.siteId = Number(siteId)
+    const records = await DailyRecord.find(filter).sort({ date: -1 })
     res.status(200).json({ records })
   } catch (error) {
     res.status(500).json({ message: 'Error creating record' })
   }
 }
+export const updateRecord = async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+    const {
+      siteId,
+      crewId,
+      date,
+      workersPresent,
+      hoursWorked,
+      tasksCompleted,
+      materialsUsed,
+    } = req.body
+
+    if (
+      !siteId ||
+      !date ||
+      !Number.isFinite(Number(workersPresent)) ||
+      !Number.isFinite(Number(hoursWorked)) ||
+      !Array.isArray(tasksCompleted)
+    ) {
+      return res.status(400).json({ message: 'Missing or invalid record fields' })
+    }
+
+    const ownsSite = await verifySiteOwnership(siteId, userId)
+    if (!ownsSite) {
+      return res.status(403).json({ message: 'Invalid site' })
+    }
+
+    if (crewId) {
+      const ownsCrew = await verifyCrewOwnership(crewId, userId)
+      if (!ownsCrew) {
+        return res.status(403).json({ message: 'Invalid crew' })
+      }
+    }
+
+    const record = await DailyRecord.findOneAndUpdate(
+      { _id: id, userId },
+      {
+        siteId,
+        crewId: crewId || undefined,
+        date,
+        workersPresent,
+        hoursWorked,
+        tasksCompleted,
+        materialsUsed,
+      },
+      { new: true }
+    )
+
+    if (!record) {
+      return res.status(404).json({ message: 'Record not found' })
+    }
+
+    res.status(200).json({ message: 'Record updated successfully', record })
+  } catch (error) {
+    console.error('UPDATE RECORD ERROR:', error)
+    res.status(500).json({ message: 'Error updating record' })
+  }
+}
 export const generateReport = async (req, res) => {
   try {
     const userId = req.user.id
-    const { from, to } = req.query
+    const { from, to, lang } = req.query
+    const strings = getPdfStrings(lang)
+    const locale = LOCALE_MAP[lang] || LOCALE_MAP.uk
     const filter = { userId }
 
     if (from || to) {
@@ -94,7 +170,7 @@ export const generateReport = async (req, res) => {
     pdf
       .font('Roboto-Bold')
       .fontSize(20)
-      .text('BuildTrack Report', { align: 'center' })
+      .text(strings.title, { align: 'center' })
     pdf.moveDown()
 
     // --- Зведена таблиця по місяцях ---
@@ -125,23 +201,25 @@ export const generateReport = async (req, res) => {
       pdf
         .font('Roboto-Bold')
         .fontSize(14)
-        .text('Зведення по місяцях:', { underline: true })
+        .text(strings.monthlySummary, { underline: true })
       pdf.moveDown(0.5)
       monthlyStats.forEach((stat) => {
         const monthName = new Date(
           stat.year,
           stat.month - 1
-        ).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })
+        ).toLocaleDateString(locale, { month: 'long', year: 'numeric' })
         pdf
           .font('Roboto')
           .fontSize(11)
-          .text(`${monthName}: ${stat.hours} год (${stat.records} записів)`)
+          .text(
+            `${monthName}: ${stat.hours} ${strings.hoursUnit} (${stat.records} ${strings.recordsWord(stat.records)})`
+          )
       })
       pdf.moveDown()
       pdf
         .font('Roboto-Bold')
         .fontSize(14)
-        .text('Детальні записи:', { underline: true })
+        .text(strings.detailedRecords, { underline: true })
       pdf.moveDown(0.5)
     }
 
@@ -149,17 +227,17 @@ export const generateReport = async (req, res) => {
       pdf
         .font('Roboto-Bold')
         .fontSize(13)
-        .text(`Дата: ${new Date(record.date).toLocaleDateString('uk-UA')}`)
+        .text(`${strings.date} ${new Date(record.date).toLocaleDateString(locale)}`)
       pdf
         .font('Roboto')
         .fontSize(11)
-        .text(`Об'єкт ID: ${record.siteId}`)
+        .text(`${strings.siteId} ${record.siteId}`)
         .text(
-          `Працівники: ${record.workersPresent} | Години: ${record.hoursWorked}`
+          `${strings.workers} ${record.workersPresent} | ${strings.hours} ${record.hoursWorked}`
         )
-        .text(`Завдання: ${record.tasksCompleted.join(', ')}`)
+        .text(`${strings.tasks} ${record.tasksCompleted.join(', ')}`)
         .text(
-          `Матеріали: ${record.materialsUsed
+          `${strings.materials} ${record.materialsUsed
             .map((m) => `${m.name || ''} (${m.quantity || 0} ${m.unit || ''})`)
             .join(', ')}`
         )
@@ -172,6 +250,63 @@ export const generateReport = async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ message: 'Error generating report' })
     }
+  }
+}
+const csvEscape = (value) => {
+  const str = String(value ?? '')
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+}
+
+export const generateCsv = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { from, to } = req.query
+    const filter = { userId }
+
+    if (from || to) {
+      filter.date = {}
+      if (from) filter.date.$gte = new Date(from)
+      if (to) {
+        const toDate = new Date(to)
+        toDate.setHours(23, 59, 59, 999)
+        filter.date.$lte = toDate
+      }
+    }
+
+    const records = await DailyRecord.find(filter).sort({ date: 1 })
+
+    const header = [
+      'date',
+      'siteId',
+      'crewId',
+      'workersPresent',
+      'hoursWorked',
+      'tasksCompleted',
+      'materialsUsed',
+    ]
+    const rows = records.map((record) =>
+      [
+        new Date(record.date).toISOString().slice(0, 10),
+        record.siteId,
+        record.crewId || '',
+        record.workersPresent,
+        record.hoursWorked,
+        record.tasksCompleted.join('; '),
+        record.materialsUsed
+          .map((m) => `${m.name || ''} (${m.quantity || 0} ${m.unit || ''})`)
+          .join('; '),
+      ]
+        .map(csvEscape)
+        .join(',')
+    )
+    const csv = [header.join(','), ...rows].join('\n')
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename=records.csv')
+    res.status(200).send('﻿' + csv)
+  } catch (error) {
+    console.error('CSV export error:', error)
+    res.status(500).json({ message: 'Error generating CSV' })
   }
 }
 export const deleteRecord = async (req, res) => {
