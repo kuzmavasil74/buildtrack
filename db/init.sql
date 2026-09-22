@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS crews (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   members TEXT[] NOT NULL DEFAULT '{}',
+  member_rates JSONB NOT NULL DEFAULT '{}',
   user_id INTEGER NOT NULL REFERENCES users(id)
 );
 

@@ -2,6 +2,7 @@ import DailyRecord from '../models/DailyRecord.js'
 import PDFDocument from 'pdfkit'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { pool } from '../config/postgres.js'
 import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
 import { verifyCrewOwnership } from '../utils/verifyCrewOwnership.js'
 import { getPdfStrings, LOCALE_MAP } from '../i18n/pdf.js'
@@ -353,5 +354,99 @@ export const getMonthlyStats = async (req, res) => {
     res.status(200).json({ stats: result })
   } catch (error) {
     res.status(500).json({ message: 'Error fetching stats' })
+  }
+}
+
+const buildPayroll = async (userId, from, to) => {
+  const filter = { userId }
+  if (from || to) {
+    filter.date = {}
+    if (from) filter.date.$gte = new Date(from)
+    if (to) {
+      const toDate = new Date(to)
+      toDate.setHours(23, 59, 59, 999)
+      filter.date.$lte = toDate
+    }
+  }
+
+  const records = await DailyRecord.find(filter)
+  const crewsResult = await pool.query(
+    `SELECT id, name, members, member_rates FROM crews WHERE user_id = $1`,
+    [userId]
+  )
+
+  const hoursByCrewId = {}
+  let unassignedHours = 0
+  for (const record of records) {
+    if (record.crewId != null) {
+      hoursByCrewId[record.crewId] =
+        (hoursByCrewId[record.crewId] || 0) + (record.hoursWorked || 0)
+    } else {
+      unassignedHours += record.hoursWorked || 0
+    }
+  }
+
+  const crews = crewsResult.rows
+    .map((crew) => {
+      const totalHours = hoursByCrewId[crew.id] || 0
+      const members = (crew.members || []).map((name) => {
+        const rate = Number(crew.member_rates?.[name]) || 0
+        const wage = Math.round(totalHours * rate * 100) / 100
+        return { name, rate, hours: totalHours, wage }
+      })
+      const totalWage = Math.round(
+        members.reduce((sum, m) => sum + m.wage, 0) * 100
+      ) / 100
+      return { crewId: crew.id, crewName: crew.name, totalHours, totalWage, members }
+    })
+    .filter((crew) => crew.totalHours > 0)
+
+  const grandTotal = Math.round(
+    crews.reduce((sum, crew) => sum + crew.totalWage, 0) * 100
+  ) / 100
+
+  return { crews, unassignedHours, grandTotal }
+}
+
+export const getPayroll = async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const payroll = await buildPayroll(req.user.id, from, to)
+    res.status(200).json(payroll)
+  } catch (error) {
+    console.error('PAYROLL ERROR:', error)
+    res.status(500).json({ message: 'Error calculating payroll' })
+  }
+}
+
+export const getPayrollCsv = async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const { crews, unassignedHours } = await buildPayroll(req.user.id, from, to)
+
+    const header = ['crew', 'member', 'hours', 'rate', 'wage']
+    const rows = []
+    crews.forEach((crew) => {
+      crew.members.forEach((member) => {
+        rows.push(
+          [crew.crewName, member.name, member.hours, member.rate, member.wage]
+            .map(csvEscape)
+            .join(',')
+        )
+      })
+    })
+    if (unassignedHours > 0) {
+      rows.push(
+        ['(no crew)', '', unassignedHours, '', ''].map(csvEscape).join(',')
+      )
+    }
+    const csv = [header.join(','), ...rows].join('\n')
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename=payroll.csv')
+    res.status(200).send('﻿' + csv)
+  } catch (error) {
+    console.error('PAYROLL CSV ERROR:', error)
+    res.status(500).json({ message: 'Error generating payroll CSV' })
   }
 }

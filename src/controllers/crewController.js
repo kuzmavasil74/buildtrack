@@ -1,7 +1,23 @@
 import { pool } from '../config/postgres.js'
 
+const normalizeMembers = (members, memberRates) => {
+  const cleanMembers = members
+    .map((m) => (typeof m === 'string' ? m.trim() : ''))
+    .filter(Boolean)
+
+  const cleanRates = {}
+  if (memberRates && typeof memberRates === 'object') {
+    for (const name of cleanMembers) {
+      const rate = Number(memberRates[name])
+      cleanRates[name] = Number.isFinite(rate) && rate >= 0 ? rate : 0
+    }
+  }
+
+  return { cleanMembers, cleanRates }
+}
+
 export const createCrew = async (req, res) => {
-  const { name, members } = req.body
+  const { name, members, memberRates } = req.body
   const userId = req.user.id
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -12,13 +28,11 @@ export const createCrew = async (req, res) => {
   }
 
   try {
-    const cleanMembers = members
-      .map((m) => (typeof m === 'string' ? m.trim() : ''))
-      .filter(Boolean)
+    const { cleanMembers, cleanRates } = normalizeMembers(members, memberRates)
 
     const crew = await pool.query(
-      `INSERT INTO crews (name, members, user_id) VALUES ($1, $2, $3) RETURNING *`,
-      [name, cleanMembers, userId]
+      `INSERT INTO crews (name, members, member_rates, user_id) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, cleanMembers, cleanRates, userId]
     )
     res.status(201).json({ message: 'Crew created successfully', crew: crew.rows[0] })
   } catch (error) {
@@ -29,7 +43,7 @@ export const createCrew = async (req, res) => {
 
 export const updateCrew = async (req, res) => {
   const { id } = req.params
-  const { name, members } = req.body
+  const { name, members, memberRates } = req.body
   const userId = req.user.id
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -40,13 +54,11 @@ export const updateCrew = async (req, res) => {
   }
 
   try {
-    const cleanMembers = members
-      .map((m) => (typeof m === 'string' ? m.trim() : ''))
-      .filter(Boolean)
+    const { cleanMembers, cleanRates } = normalizeMembers(members, memberRates)
 
     const crew = await pool.query(
-      `UPDATE crews SET name = $1, members = $2 WHERE id = $3 AND user_id = $4 RETURNING *`,
-      [name, cleanMembers, id, userId]
+      `UPDATE crews SET name = $1, members = $2, member_rates = $3 WHERE id = $4 AND user_id = $5 RETURNING *`,
+      [name, cleanMembers, cleanRates, id, userId]
     )
     if (crew.rows.length === 0) {
       return res.status(404).json({ message: 'Crew not found' })

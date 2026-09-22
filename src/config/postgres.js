@@ -33,6 +33,7 @@ export const ensureSchema = async () => {
       members TEXT[] NOT NULL DEFAULT '{}',
       user_id INTEGER NOT NULL REFERENCES users(id)
     );
+    ALTER TABLE crews ADD COLUMN IF NOT EXISTS member_rates JSONB NOT NULL DEFAULT '{}';
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
