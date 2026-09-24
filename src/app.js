@@ -9,6 +9,10 @@ import receiptRoutes from './routes/receiptRoutes.js'
 
 const app = express()
 
+// Behind Vercel's proxy and Render's load balancer; without this every user
+// shares one IP and therefore one login rate-limit bucket.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 2)
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
