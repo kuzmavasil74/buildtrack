@@ -8,6 +8,7 @@ import {
   getMonthlyStats,
   getPayroll,
   getPayrollCsv,
+  getWorkerDirectory,
 } from '../controllers/recordController.js'
 import { authMiddleware } from '../middleware/auth.js'
 import express from 'express'
@@ -22,4 +23,5 @@ router.get('/payroll.csv', authMiddleware, getPayrollCsv)
 router.put('/:id', authMiddleware, updateRecord)
 router.delete('/:id', authMiddleware, deleteRecord)
 router.get('/monthly-stats', authMiddleware, getMonthlyStats)
+router.get('/worker-directory', authMiddleware, getWorkerDirectory)
 export default router

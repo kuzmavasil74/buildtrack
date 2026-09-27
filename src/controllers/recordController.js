@@ -10,6 +10,27 @@ import { parseRecordBody } from '../utils/parseRecordBody.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// Every name ever typed into a record's worker entries, most recent first,
+// with the rate last used for them — so a name typed once autocompletes
+// (and pre-fills its rate) on every later record, crew or no crew.
+export const getWorkerDirectory = async (req, res) => {
+  try {
+    const rows = await DailyRecord.aggregate([
+      { $match: { userId: req.user.id } },
+      { $sort: { date: -1 } },
+      { $unwind: '$entries' },
+      { $group: { _id: '$entries.name', rate: { $first: '$entries.rate' } } },
+      { $project: { _id: 0, name: '$_id', rate: 1 } },
+      { $sort: { name: 1 } },
+    ])
+    res.status(200).json({ workers: rows })
+  } catch (error) {
+    console.error('WORKER DIRECTORY ERROR:', error)
+    res.status(500).json({ message: 'Error fetching worker directory' })
+  }
+}
+
 export const createRecord = async (req, res) => {
   try {
     const userId = req.user.id
