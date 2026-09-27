@@ -8,7 +8,9 @@ const normalizeMembers = (members, memberRates) => {
   const cleanRates = {}
   if (memberRates && typeof memberRates === 'object') {
     for (const name of cleanMembers) {
-      const rate = Number(memberRates[name])
+      // Accept "11,5" as well as "11.5" (comma is the decimal separator in
+      // uk/pl/ru/cs locales).
+      const rate = Number(String(memberRates[name] ?? '').trim().replace(',', '.'))
       cleanRates[name] = Number.isFinite(rate) && rate >= 0 ? rate : 0
     }
   }
