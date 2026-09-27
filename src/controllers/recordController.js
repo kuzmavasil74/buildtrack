@@ -11,6 +11,17 @@ import { parseRecordBody } from '../utils/parseRecordBody.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+const applyDateRange = (filter, from, to) => {
+  if (!from && !to) return
+  filter.date = {}
+  if (from) filter.date.$gte = new Date(from)
+  if (to) {
+    const toDate = new Date(to)
+    toDate.setHours(23, 59, 59, 999)
+    filter.date.$lte = toDate
+  }
+}
+
 // Every name ever typed into a record's worker entries, most recent first,
 // with the rate last used for them — so a name typed once autocompletes
 // (and pre-fills its rate) on every later record, crew or no crew.
@@ -59,9 +70,10 @@ export const createRecord = async (req, res) => {
 export const getRecords = async (req, res) => {
   try {
     const userId = req.user.id
-    const { siteId } = req.query
+    const { siteId, from, to } = req.query
     const filter = { userId }
     if (siteId) filter.siteId = Number(siteId)
+    applyDateRange(filter, from, to)
     const records = await DailyRecord.find(filter).sort({ date: -1, _id: -1 })
     res.status(200).json({ records })
   } catch (error) {
@@ -113,16 +125,7 @@ export const generateReport = async (req, res) => {
     const strings = getPdfStrings(lang)
     const locale = LOCALE_MAP[lang] || LOCALE_MAP.uk
     const filter = { userId }
-
-    if (from || to) {
-      filter.date = {}
-      if (from) filter.date.$gte = new Date(from)
-      if (to) {
-        const toDate = new Date(to)
-        toDate.setHours(23, 59, 59, 999)
-        filter.date.$lte = toDate
-      }
-    }
+    applyDateRange(filter, from, to)
 
     const response = await DailyRecord.find(filter).sort({ date: 1, _id: 1 })
     const fontPath = path.join(__dirname, '../../fonts/Roboto-Regular.ttf')
@@ -250,16 +253,7 @@ export const generateCsv = async (req, res) => {
     const userId = req.user.id
     const { from, to } = req.query
     const filter = { userId }
-
-    if (from || to) {
-      filter.date = {}
-      if (from) filter.date.$gte = new Date(from)
-      if (to) {
-        const toDate = new Date(to)
-        toDate.setHours(23, 59, 59, 999)
-        filter.date.$lte = toDate
-      }
-    }
+    applyDateRange(filter, from, to)
 
     const records = await DailyRecord.find(filter).sort({ date: 1, _id: 1 })
 
@@ -360,15 +354,7 @@ const round2 = (n) => Math.round(n * 100) / 100
 
 const buildPayroll = async (userId, from, to) => {
   const filter = { userId }
-  if (from || to) {
-    filter.date = {}
-    if (from) filter.date.$gte = new Date(from)
-    if (to) {
-      const toDate = new Date(to)
-      toDate.setHours(23, 59, 59, 999)
-      filter.date.$lte = toDate
-    }
-  }
+  applyDateRange(filter, from, to)
 
   const records = await DailyRecord.find(filter)
   const crewsResult = await pool.query(
