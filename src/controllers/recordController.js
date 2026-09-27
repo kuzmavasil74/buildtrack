@@ -62,7 +62,7 @@ export const getRecords = async (req, res) => {
     const { siteId } = req.query
     const filter = { userId }
     if (siteId) filter.siteId = Number(siteId)
-    const records = await DailyRecord.find(filter).sort({ date: -1 })
+    const records = await DailyRecord.find(filter).sort({ date: -1, _id: -1 })
     res.status(200).json({ records })
   } catch (error) {
     res.status(500).json({ message: 'Error creating record' })
@@ -124,7 +124,7 @@ export const generateReport = async (req, res) => {
       }
     }
 
-    const response = await DailyRecord.find(filter).sort({ date: 1 })
+    const response = await DailyRecord.find(filter).sort({ date: 1, _id: 1 })
     const fontPath = path.join(__dirname, '../../fonts/Roboto-Regular.ttf')
     const fontBoldPath = path.join(__dirname, '../../fonts/Roboto-Bold.ttf')
 
@@ -261,7 +261,7 @@ export const generateCsv = async (req, res) => {
       }
     }
 
-    const records = await DailyRecord.find(filter).sort({ date: 1 })
+    const records = await DailyRecord.find(filter).sort({ date: 1, _id: 1 })
 
     const crewNames = await getCrewNames(userId)
     const header = [
