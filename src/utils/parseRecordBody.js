@@ -1,13 +1,18 @@
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+const LUNCH_BREAK_MINUTES = 30
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-// Hours between "HH:MM" and "HH:MM"; an end before the start means the shift crossed midnight.
+// Hours between "HH:MM" and "HH:MM", minus an automatic 30-minute lunch break
+// (never below 0); an end before the start means the shift crossed midnight.
+// Only a fallback for clients that send start/end without hours -- the
+// frontend always computes and sends hours itself.
 export const hoursBetween = (start, end) => {
   const [sh, sm] = start.split(':').map(Number)
   const [eh, em] = end.split(':').map(Number)
   let minutes = eh * 60 + em - (sh * 60 + sm)
   if (minutes < 0) minutes += 24 * 60
+  minutes = Math.max(minutes - LUNCH_BREAK_MINUTES, 0)
   return round2(minutes / 60)
 }
 
