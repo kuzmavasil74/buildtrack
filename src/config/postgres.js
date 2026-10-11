@@ -19,6 +19,7 @@ export const ensureSchema = async () => {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'UAH';
     CREATE TABLE IF NOT EXISTS sites (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,

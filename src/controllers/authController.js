@@ -4,6 +4,7 @@ import { pool } from '../config/postgres.js'
 import { AUTH_COOKIE_NAME, authCookieOptions } from '../config/cookie.js'
 import { sendMail } from '../utils/mailer.js'
 import { startSession } from '../utils/session.js'
+import { DEFAULT_CURRENCY, isSupportedCurrency } from '../config/currencies.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -174,5 +175,33 @@ export const logout = async (req, res) => {
 }
 
 export const me = async (req, res) => {
-  res.status(200).json({ id: req.user.id })
+  try {
+    const result = await pool.query(`SELECT currency FROM users WHERE id = $1`, [
+      req.user.id,
+    ])
+    res.status(200).json({
+      id: req.user.id,
+      currency: result.rows[0]?.currency || DEFAULT_CURRENCY,
+    })
+  } catch (error) {
+    console.error('ME ERROR:', error)
+    res.status(500).json({ message: 'Could not load profile' })
+  }
+}
+
+export const updateCurrency = async (req, res) => {
+  const { currency } = req.body
+  if (!isSupportedCurrency(currency)) {
+    return res.status(400).json({ message: 'Unsupported currency' })
+  }
+  try {
+    await pool.query(`UPDATE users SET currency = $1 WHERE id = $2`, [
+      currency,
+      req.user.id,
+    ])
+    res.status(200).json({ currency })
+  } catch (error) {
+    console.error('UPDATE CURRENCY ERROR:', error)
+    res.status(500).json({ message: 'Could not save currency' })
+  }
 }

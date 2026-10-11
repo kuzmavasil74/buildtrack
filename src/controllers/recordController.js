@@ -9,6 +9,7 @@ import { getPdfStrings, LOCALE_MAP } from '../i18n/pdf.js'
 import { parseRecordBody } from '../utils/parseRecordBody.js'
 import { applyDateRange } from '../utils/dateRange.js'
 import { computePayroll } from '../utils/payroll.js'
+import { DEFAULT_CURRENCY } from '../config/currencies.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -353,11 +354,19 @@ const buildPayroll = async (userId, from, to) => {
   return computePayroll(records, crewsResult.rows)
 }
 
+const getUserCurrency = async (userId) => {
+  const { rows } = await pool.query(`SELECT currency FROM users WHERE id = $1`, [userId])
+  return rows[0]?.currency || DEFAULT_CURRENCY
+}
+
 export const getPayroll = async (req, res) => {
   try {
     const { from, to } = req.query
-    const payroll = await buildPayroll(req.user.id, from, to)
-    res.status(200).json(payroll)
+    const [payroll, currency] = await Promise.all([
+      buildPayroll(req.user.id, from, to),
+      getUserCurrency(req.user.id),
+    ])
+    res.status(200).json({ ...payroll, currency })
   } catch (error) {
     console.error('PAYROLL ERROR:', error)
     res.status(500).json({ message: 'Error calculating payroll' })
@@ -367,14 +376,17 @@ export const getPayroll = async (req, res) => {
 export const getPayrollCsv = async (req, res) => {
   try {
     const { from, to } = req.query
-    const { crews, unassignedHours } = await buildPayroll(req.user.id, from, to)
+    const [{ crews, unassignedHours }, currency] = await Promise.all([
+      buildPayroll(req.user.id, from, to),
+      getUserCurrency(req.user.id),
+    ])
 
-    const header = ['crew', 'member', 'hours', 'rate', 'wage']
+    const header = ['crew', 'member', 'hours', 'rate', 'wage', 'currency']
     const rows = []
     crews.forEach((crew) => {
       crew.members.forEach((member) => {
         rows.push(
-          [crew.crewName ?? '(no crew)', member.name, member.hours, member.rate, member.wage]
+          [crew.crewName ?? '(no crew)', member.name, member.hours, member.rate, member.wage, currency]
             .map(csvEscape)
             .join(',')
         )
@@ -382,7 +394,7 @@ export const getPayrollCsv = async (req, res) => {
     })
     if (unassignedHours > 0) {
       rows.push(
-        ['(no crew)', '', unassignedHours, '', ''].map(csvEscape).join(',')
+        ['(no crew)', '', unassignedHours, '', '', currency].map(csvEscape).join(',')
       )
     }
     const csv = [header.join(','), ...rows].join('\n')

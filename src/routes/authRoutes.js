@@ -3,6 +3,7 @@ import {
   login,
   logout,
   me,
+  updateCurrency,
   forgotPassword,
   resetPassword,
 } from '../controllers/authController.js'
@@ -17,5 +18,6 @@ router.post('/forgot-password', authLimiter, forgotPassword)
 router.post('/reset-password', authLimiter, resetPassword)
 router.post('/logout', logout)
 router.get('/me', authMiddleware, me)
+router.put('/currency', authMiddleware, updateCurrency)
 
 export default router
