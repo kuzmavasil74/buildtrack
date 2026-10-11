@@ -1,4 +1,6 @@
 import { pool } from '../config/postgres.js'
+import DailyRecord from '../models/DailyRecord.js'
+import Receipt from '../models/Receipt.js'
 
 const parseCoordinate = (value) =>
   value === '' || value == null ? null : Number(value)
@@ -72,12 +74,32 @@ export const deleteSite = async (req, res) => {
   const { id } = req.params
   const userId = req.user.id
   try {
-    await pool.query(`DELETE FROM sites WHERE id = $1 AND user_id = $2`, [
-      id,
-      userId,
+    // Records and receipts live in MongoDB and only point at the site by id, so
+    // deleting a site that still has them would leave them orphaned.
+    const siteId = Number(id)
+    const [records, receipts] = await Promise.all([
+      DailyRecord.countDocuments({ userId, siteId }),
+      Receipt.countDocuments({ userId, siteId }),
     ])
+    if (records > 0 || receipts > 0) {
+      return res.status(409).json({
+        message: 'Site still has records or receipts',
+        code: 'SITE_IN_USE',
+        records,
+        receipts,
+      })
+    }
+
+    const result = await pool.query(
+      `DELETE FROM sites WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Site not found' })
+    }
     res.status(200).json({ message: 'Site deleted successfully' })
   } catch (error) {
+    console.error('DELETE SITE ERROR:', error)
     res.status(500).json({ message: 'Error deleting site' })
   }
 }

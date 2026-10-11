@@ -1,9 +1,9 @@
 import bcrypt from 'bcrypt'
 import crypto from 'crypto'
-import jwt from 'jsonwebtoken'
 import { pool } from '../config/postgres.js'
 import { AUTH_COOKIE_NAME, authCookieOptions } from '../config/cookie.js'
 import { sendMail } from '../utils/mailer.js'
+import { startSession } from '../utils/session.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -61,10 +61,7 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
-    const token = jwt.sign({ id: user.rows[0].id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    })
-    res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions)
+    startSession(res, user.rows[0].id)
     res.status(200).json({ message: 'User logged in successfully' })
   } catch (error) {
     console.error('LOGIN ERROR:', error)

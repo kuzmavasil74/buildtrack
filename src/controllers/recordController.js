@@ -7,20 +7,11 @@ import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
 import { verifyCrewOwnership } from '../utils/verifyCrewOwnership.js'
 import { getPdfStrings, LOCALE_MAP } from '../i18n/pdf.js'
 import { parseRecordBody } from '../utils/parseRecordBody.js'
+import { applyDateRange } from '../utils/dateRange.js'
+import { computePayroll } from '../utils/payroll.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-
-const applyDateRange = (filter, from, to) => {
-  if (!from && !to) return
-  filter.date = {}
-  if (from) filter.date.$gte = new Date(from)
-  if (to) {
-    const toDate = new Date(to)
-    toDate.setHours(23, 59, 59, 999)
-    filter.date.$lte = toDate
-  }
-}
 
 // Every name ever typed into a record's worker entries, most recent first,
 // with the rate last used for them — so a name typed once autocompletes
@@ -350,8 +341,6 @@ export const getMonthlyStats = async (req, res) => {
   }
 }
 
-const round2 = (n) => Math.round(n * 100) / 100
-
 const buildPayroll = async (userId, from, to) => {
   const filter = { userId }
   applyDateRange(filter, from, to)
@@ -361,61 +350,7 @@ const buildPayroll = async (userId, from, to) => {
     `SELECT id, name, members, member_rates FROM crews WHERE user_id = $1`,
     [userId]
   )
-  const crewById = new Map(crewsResult.rows.map((crew) => [crew.id, crew]))
-
-  // groups: crew id (or null for people logged without a crew) -> name -> { hours, wage }
-  const groups = new Map()
-  const addHours = (crewId, name, hours, rate) => {
-    if (!groups.has(crewId)) groups.set(crewId, new Map())
-    const people = groups.get(crewId)
-    const person = people.get(name) || { hours: 0, wage: 0 }
-    person.hours += hours
-    person.wage += hours * rate
-    people.set(name, person)
-  }
-
-  let unassignedHours = 0
-  for (const record of records) {
-    const crew = record.crewId != null ? crewById.get(record.crewId) : undefined
-    const crewRate = (name) => Number(crew?.member_rates?.[name]) || 0
-
-    if (record.entries?.length) {
-      for (const entry of record.entries) {
-        const rate = Number.isFinite(entry.rate) ? entry.rate : crewRate(entry.name)
-        addHours(crew ? crew.id : null, entry.name, entry.hours, rate)
-      }
-    } else if (crew) {
-      // Legacy record: every member of the crew is credited with the record's hours.
-      for (const name of crew.members || []) {
-        addHours(crew.id, name, record.hoursWorked || 0, crewRate(name))
-      }
-    } else {
-      unassignedHours += record.hoursWorked || 0
-    }
-  }
-
-  const crews = [...groups.entries()]
-    .map(([crewId, people]) => {
-      const members = [...people.entries()].map(([name, { hours, wage }]) => ({
-        name,
-        hours: round2(hours),
-        wage: round2(wage),
-        rate: hours > 0 ? round2(wage / hours) : 0,
-      }))
-      return {
-        crewId,
-        crewName: crewId != null ? crewById.get(crewId).name : null,
-        totalHours: round2(members.reduce((sum, m) => sum + m.hours, 0)),
-        totalWage: round2(members.reduce((sum, m) => sum + m.wage, 0)),
-        members,
-      }
-    })
-    .filter((crew) => crew.totalHours > 0)
-    .sort((a, b) => (a.crewId === null) - (b.crewId === null))
-
-  const grandTotal = round2(crews.reduce((sum, crew) => sum + crew.totalWage, 0))
-
-  return { crews, unassignedHours: round2(unassignedHours), grandTotal }
+  return computePayroll(records, crewsResult.rows)
 }
 
 export const getPayroll = async (req, res) => {

@@ -1,4 +1,5 @@
 import { pool } from '../config/postgres.js'
+import DailyRecord from '../models/DailyRecord.js'
 
 const normalizeMembers = (members, memberRates) => {
   const cleanMembers = members
@@ -88,12 +89,22 @@ export const deleteCrew = async (req, res) => {
   const { id } = req.params
   const userId = req.user.id
   try {
-    await pool.query(`DELETE FROM crews WHERE id = $1 AND user_id = $2`, [
-      id,
-      userId,
-    ])
+    const result = await pool.query(
+      `DELETE FROM crews WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Crew not found' })
+    }
+    // Records keep their per-worker entries; only the link to the crew goes,
+    // so editing an old record never submits an id the server no longer knows.
+    await DailyRecord.updateMany(
+      { userId, crewId: Number(id) },
+      { $unset: { crewId: 1 } }
+    )
     res.status(200).json({ message: 'Crew deleted successfully' })
   } catch (error) {
+    console.error('DELETE CREW ERROR:', error)
     res.status(500).json({ message: 'Error deleting crew' })
   }
 }
