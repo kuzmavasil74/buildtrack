@@ -90,10 +90,13 @@ tests and `npm audit --audit-level=high` on every push and pull request.
 
 ## Deploy (Railway)
 
-The `buildtrack` Railway project has two services: `buildtrack-api` (GitHub
-`main`, started with `npm start`) and `Postgres`. Pushing to `main` deploys.
-Variables are set on the `buildtrack-api` service. The frontend's `vercel.json`
-points its `/api` rewrite at the API's public domain.
+The `buildtrack` Railway project has three services: `buildtrack-api` (started
+with `npm start`), `Postgres`, and `buildtrack-backup` (the nightly cron job,
+see Backups). Both code services follow the GitHub `main` branch and redeploy on
+every push; this needs the Railway GitHub App to have access to this repository
+(GitHub -> Settings -> Applications -> Railway -> Repository access). Variables
+are set per service; `buildtrack-backup` reuses the API's values by reference.
+The frontend's `vercel.json` points its `/api` rewrite at the API's public domain.
 
 ## Backups
 
