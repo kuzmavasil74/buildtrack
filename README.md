@@ -97,20 +97,22 @@ points its `/api` rewrite at the API's public domain.
 
 ## Backups
 
-Neither database backs itself up on its own, so set both up:
+Railway's own volume backups are not available on the Hobby plan, and the free
+MongoDB Atlas tier has none, so the app backs itself up:
 
-1. **Postgres on Railway:** open the `Postgres` service → **Backups** and turn on
-   scheduled backups (included in the Hobby plan).
-2. **MongoDB Atlas:** the free M0 tier has no backups. Either upgrade the cluster
-   or take dumps yourself with `scripts/backup.sh` (needs `pg_dump` and
-   `mongodump`):
+- **Nightly job:** the Railway cron service `buildtrack-backup` runs
+  `node scripts/backup-to-s3.js` every night (02:00 UTC). It writes every
+  Postgres table and MongoDB collection into one gzip file,
+  `s3://<S3_BUCKET_NAME>/backups/buildtrack-<UTC timestamp>.json.gz`
+  (server-side encrypted), checks that the file reads back to the same row
+  counts, and deletes backups older than 30 days (never the newest 7).
+  A failed run shows up as a failed deployment in Railway.
+- **Local copy any time:** `DATABASE_URL=... MONGO_URI=... node scripts/backup-to-s3.js --file out.json.gz`
+- **Restore:** into *empty* databases only, with
+  `node scripts/restore-backup.js <file.json.gz>` (dry run: shows what is inside) and
+  `... --apply` (writes). Download the file with `aws s3 cp`, or pass `--s3 <key>`.
+  It refuses to touch a database that already has data.
+  Tested: a restored copy logs in with the old passwords and produces an identical payroll.
+- The backup contains password hashes, so keep the bucket private.
 
-   ```bash
-   DATABASE_URL=<public postgres url> MONGO_URI=<atlas uri> ./scripts/backup.sh
-   ```
-
-   Railway's Postgres is private; to dump it from your computer, give the
-   service a temporary TCP proxy (Settings → Networking), run the script with the
-   proxy's URL, then remove the proxy again.
-
-Check a restore now and then: a backup nobody has tried to restore is a guess.
+Do a test restore into scratch databases now and then.
