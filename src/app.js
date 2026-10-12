@@ -8,6 +8,7 @@ import cors from 'cors'
 import receiptRoutes from './routes/receiptRoutes.js'
 import companyRoutes from './routes/companyRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
+import accountRoutes from './routes/accountRoutes.js'
 
 const app = express()
 
@@ -43,5 +44,6 @@ app.use('/crews', crewRoutes)
 app.use('/receipts', receiptRoutes)
 app.use('/company', companyRoutes)
 app.use('/admin', adminRoutes)
+app.use('/account', accountRoutes)
 
 export default app

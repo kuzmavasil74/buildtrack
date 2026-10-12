@@ -67,6 +67,7 @@ npm test
 | `PORT` | no | Railway sets it. |
 | `NODE_ENV` | prod | `production` turns on secure cookies and proxy trust. |
 | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | for receipts | |
+| `S3_ENDPOINT` | local tests only | An S3-compatible server (e.g. `adobe/s3mock` in Docker); unset in production. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | optional | Without SMTP reset and invitation links are printed to the server log (the owner also gets the invitation link to share by hand). |
 | `OPEN_REGISTRATION` | optional | `true` lets anyone sign up and start a company; otherwise only invitation links can create accounts. |
 | `ADMIN_EMAILS` | optional | Comma-separated emails that may open `/admin` (site-wide user stats). |
@@ -92,6 +93,21 @@ All routes except auth need the session cookie.
 | `GET/PUT /company`, `POST /company/invites`, `DELETE /company/invites/:id`, `DELETE /company/members/:id` | owner |
 | `GET /company/invites/:token` (public), `POST /company/invites/accept` | invitation preview / accept |
 | `GET /admin/stats` | `ADMIN_EMAILS` only: counts per user, never record content |
+| `GET /account/export` | the signed-in user's data as a JSON download: an owner gets the company's sites, crews, records and receipt metadata, a foreman their account and what they entered |
+| `DELETE /account` `{ email }` | deletes the account after the email is typed again; see below |
+
+### Deleting an account
+
+- A **foreman**'s user row, reset tokens and sent invitations are deleted. The
+  records and receipts they entered stay with the company, with `userId` set
+  to `null` (nothing points at a deleted person; the owner can still edit them).
+- An **owner** whose company still has other members gets `409
+  OWNER_HAS_MEMBERS` and must remove them first. Otherwise the company is
+  deleted with its sites, crews, records, receipts, invitations and the receipt
+  photos under `receipts/<siteId>/` in S3, then the user.
+- A company the person owns but left earlier (they joined another as foreman)
+  is deleted the same way, or handed to its oldest member if someone joined it.
+- Deleted data drops out of the nightly backups once they age out (30 days).
 
 ## Tests and CI
 
