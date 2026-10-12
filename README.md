@@ -26,8 +26,18 @@ browser ──► Vercel (React SPA) ──/api/*──► Railway: Express API 
                                                               └──► S3        (receipt photos)
 ```
 
-- **Postgres** holds users, sites, crews and password-reset tokens. Tables are
-  created and migrated on start (`ensureSchema()` in `src/config/postgres.js`).
+- **Postgres** holds users, companies, invitations, sites, crews and
+  password-reset tokens. Tables are created and migrated on start
+  (`ensureSchema()` and `ensureCompanies()` in `src/config/postgres.js`).
+- **Companies:** all data belongs to a company, not to a person. Every user is
+  in exactly one company as `owner` or `foreman`. Registering starts a new
+  company; an invitation link (`/invite?token=`, valid 14 days) adds a foreman
+  instead. The owner manages sites, crews, payroll, currency and the team; a
+  foreman sees the company's sites, crews, records and receipts, adds records
+  and receipts, and edits or deletes only the records they entered. Removing a
+  foreman keeps their records in the company and sends them back to a company
+  of their own. Records and receipts carry both `userId` (who entered it) and
+  `companyId` (who can see it); older documents are stamped on start.
 - **MongoDB** (Atlas) holds daily records and receipts. They point at a site or
   crew by numeric id only, so the API protects that link: a site that still has
   records or receipts cannot be deleted (`409 SITE_IN_USE`), and deleting a crew
@@ -57,7 +67,8 @@ npm test
 | `PORT` | no | Railway sets it. |
 | `NODE_ENV` | prod | `production` turns on secure cookies and proxy trust. |
 | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | for receipts | |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | optional | Without SMTP the reset link is printed to the server log. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | optional | Without SMTP reset and invitation links are printed to the server log (the owner also gets the invitation link to share by hand). |
+| `ADMIN_EMAILS` | optional | Comma-separated emails that may open `/admin` (site-wide user stats). |
 
 ## API
 
@@ -67,16 +78,19 @@ All routes except auth need the session cookie.
 |---|---|
 | `POST /auth/register`, `/auth/login`, `/auth/logout` | |
 | `POST /auth/forgot-password`, `/auth/reset-password` | rate limited |
-| `GET /auth/me` | `{ id, currency }` |
-| `PUT /auth/currency` | `{ currency }` |
-| `GET/POST /sites`, `PUT/DELETE /sites/:id` | |
-| `GET/POST /crews`, `PUT/DELETE /crews/:id` | |
+| `GET /auth/me` | `{ id, email, role, isAdmin, company, currency }` |
+| `PUT /auth/currency` | owner; the company's payroll currency |
+| `GET/POST /sites`, `PUT/DELETE /sites/:id` | writes: owner |
+| `GET/POST /crews`, `PUT/DELETE /crews/:id` | writes: owner |
 | `POST /records`, `PUT/DELETE /records/:id` | per-worker `entries[]` |
 | `GET /records?siteId&from&to` | `from`/`to` are `YYYY-MM-DD`, inclusive |
-| `GET /records/payroll?from&to`, `/records/payroll.csv` | |
+| `GET /records/payroll?from&to`, `/records/payroll.csv` | owner |
 | `GET /records/report?from&to&lang`, `/records/export.csv` | PDF / CSV |
 | `GET /records/monthly-stats`, `/records/worker-directory` | |
 | `POST /receipts/upload`, `GET /receipts?siteId` | each receipt carries a `viewUrl` signed for 1 hour (the bucket is private) |
+| `GET/PUT /company`, `POST /company/invites`, `DELETE /company/invites/:id`, `DELETE /company/members/:id` | owner |
+| `GET /company/invites/:token` (public), `POST /company/invites/accept` | invitation preview / accept |
+| `GET /admin/stats` | `ADMIN_EMAILS` only: counts per user, never record content |
 
 ## Tests and CI
 

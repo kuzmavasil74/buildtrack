@@ -43,5 +43,75 @@ export const ensureSchema = async () => {
       used_at TIMESTAMPTZ
     );
     CREATE INDEX IF NOT EXISTS idx_prt_token_hash ON password_reset_tokens(token_hash);
+
+    -- Companies: every user belongs to one. The owner manages sites, crews,
+    -- payroll and members; a foreman adds records and receipts.
+    CREATE TABLE IF NOT EXISTS companies (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      owner_id INTEGER REFERENCES users(id),
+      currency TEXT NOT NULL DEFAULT 'UAH',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'owner';
+    -- Left NULL for accounts created before it existed.
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+    ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW();
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+    ALTER TABLE sites ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id);
+    ALTER TABLE crews ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id);
+    CREATE INDEX IF NOT EXISTS idx_sites_company ON sites(company_id);
+    CREATE INDEX IF NOT EXISTS idx_crews_company ON crews(company_id);
+    CREATE TABLE IF NOT EXISTS company_invites (
+      id SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'foreman',
+      token_hash TEXT NOT NULL UNIQUE,
+      invited_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      accepted_at TIMESTAMPTZ,
+      revoked_at TIMESTAMPTZ
+    );
   `)
 }
+
+// Gives every user without a company one of their own (as owner, with their
+// old currency) and stamps their sites and crews with it. Safe to run on
+// every start: it only touches rows that are still missing a company.
+export const ensureCompanies = async () => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const { rows: orphans } = await client.query(
+      `SELECT id, email, currency FROM users WHERE company_id IS NULL ORDER BY id FOR UPDATE`
+    )
+    for (const user of orphans) {
+      const { rows } = await client.query(
+        `INSERT INTO companies (name, owner_id, currency) VALUES ($1, $2, $3) RETURNING id`,
+        [defaultCompanyName(user.email), user.id, user.currency || 'UAH']
+      )
+      await client.query(`UPDATE users SET company_id = $1, role = 'owner' WHERE id = $2`, [
+        rows[0].id,
+        user.id,
+      ])
+    }
+    for (const table of ['sites', 'crews']) {
+      await client.query(
+        `UPDATE ${table} t SET company_id = u.company_id FROM users u
+         WHERE t.user_id = u.id AND t.company_id IS NULL`
+      )
+    }
+    await client.query('COMMIT')
+    if (orphans.length) console.log(`Companies: created ${orphans.length} for existing users`)
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export const defaultCompanyName = (email) => String(email || '').split('@')[0] || 'My company'

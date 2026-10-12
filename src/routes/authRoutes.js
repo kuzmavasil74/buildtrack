@@ -8,6 +8,7 @@ import {
   resetPassword,
 } from '../controllers/authController.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { requireOwner } from '../utils/permissions.js'
 import { authLimiter } from '../middleware/rateLimit.js'
 import express from 'express'
 const router = express.Router()
@@ -18,6 +19,6 @@ router.post('/forgot-password', authLimiter, forgotPassword)
 router.post('/reset-password', authLimiter, resetPassword)
 router.post('/logout', logout)
 router.get('/me', authMiddleware, me)
-router.put('/currency', authMiddleware, updateCurrency)
+router.put('/currency', authMiddleware, requireOwner, updateCurrency)
 
 export default router

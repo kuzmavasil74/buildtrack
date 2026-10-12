@@ -21,8 +21,9 @@ export const createSite = async (req, res) => {
 
   try {
     const site = await pool.query(
-      `INSERT INTO sites (name, address, latitude, longitude, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [name, address, lat, lng, userId]
+      `INSERT INTO sites (name, address, latitude, longitude, user_id, company_id)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [name, address, lat, lng, userId, req.user.companyId]
     )
     const siteId = site.rows[0].id
     res.status(201).json({ message: 'Site created successfully', siteId })
@@ -31,10 +32,9 @@ export const createSite = async (req, res) => {
   }
 }
 export const getSites = async (req, res) => {
-  const userId = req.user.id
   try {
-    const sites = await pool.query(`SELECT * FROM sites WHERE user_id = $1`, [
-      userId,
+    const sites = await pool.query(`SELECT * FROM sites WHERE company_id = $1 ORDER BY id`, [
+      req.user.companyId,
     ])
     res.status(200).json({ sites: sites.rows })
   } catch (error) {
@@ -44,7 +44,7 @@ export const getSites = async (req, res) => {
 export const updateSite = async (req, res) => {
   const { id } = req.params
   const { name, address, latitude, longitude } = req.body
-  const userId = req.user.id
+  const { companyId } = req.user
 
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ message: 'Site name is required' })
@@ -59,8 +59,8 @@ export const updateSite = async (req, res) => {
   try {
     const site = await pool.query(
       `UPDATE sites SET name = $1, address = $2, latitude = $3, longitude = $4
-       WHERE id = $5 AND user_id = $6 RETURNING *`,
-      [name, address, lat, lng, id, userId]
+       WHERE id = $5 AND company_id = $6 RETURNING *`,
+      [name, address, lat, lng, id, companyId]
     )
     if (site.rows.length === 0) {
       return res.status(404).json({ message: 'Site not found' })
@@ -72,14 +72,14 @@ export const updateSite = async (req, res) => {
 }
 export const deleteSite = async (req, res) => {
   const { id } = req.params
-  const userId = req.user.id
+  const { companyId } = req.user
   try {
     // Records and receipts live in MongoDB and only point at the site by id, so
     // deleting a site that still has them would leave them orphaned.
     const siteId = Number(id)
     const [records, receipts] = await Promise.all([
-      DailyRecord.countDocuments({ userId, siteId }),
-      Receipt.countDocuments({ userId, siteId }),
+      DailyRecord.countDocuments({ companyId, siteId }),
+      Receipt.countDocuments({ companyId, siteId }),
     ])
     if (records > 0 || receipts > 0) {
       return res.status(409).json({
@@ -91,8 +91,8 @@ export const deleteSite = async (req, res) => {
     }
 
     const result = await pool.query(
-      `DELETE FROM sites WHERE id = $1 AND user_id = $2`,
-      [id, userId]
+      `DELETE FROM sites WHERE id = $1 AND company_id = $2`,
+      [id, companyId]
     )
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Site not found' })

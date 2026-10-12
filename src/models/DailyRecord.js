@@ -15,7 +15,9 @@ const EntrySchema = new mongoose.Schema(
 
 const DailyRecordSchema = new mongoose.Schema({
   siteId: { type: Number, required: true },
+  // userId is whoever entered the record; companyId decides who can see it.
   userId: { type: Number, required: true },
+  companyId: { type: Number, index: true },
   crewId: { type: Number },
   date: { type: Date, required: true },
   // Derived from `entries` when they are present (legacy records store them directly).

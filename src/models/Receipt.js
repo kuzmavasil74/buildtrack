@@ -4,6 +4,7 @@ const receiptSchema = new mongoose.Schema(
   {
     siteId: { type: Number, required: true },
     userId: { type: Number, required: true },
+    companyId: { type: Number, index: true },
     key: { type: String, required: true },
     fileUrl: { type: String, required: true },
     originalName: { type: String },

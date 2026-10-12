@@ -17,7 +17,9 @@ import Receipt from '../src/models/Receipt.js'
 import { countRows, decodeBackup } from '../src/utils/backup.js'
 
 // Parents before children, so foreign keys hold.
-const PG_ORDER = ['users', 'sites', 'crews', 'password_reset_tokens']
+// users and companies point at each other, so users go in without their
+// company_id and get it once the companies exist.
+const PG_ORDER = ['users', 'companies', 'sites', 'crews', 'password_reset_tokens', 'company_invites']
 
 const args = process.argv.slice(2)
 const apply = args.includes('--apply')
@@ -58,13 +60,20 @@ const run = async () => {
     await client.query('BEGIN')
     for (const table of PG_ORDER) {
       for (const row of snapshot.postgres[table] || []) {
-        const cols = Object.keys(row)
+        const cols = Object.keys(row).filter((c) => !(table === 'users' && c === 'company_id'))
         await client.query(
           `INSERT INTO ${table} (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${cols
             .map((_, i) => `$${i + 1}`)
             .join(',')})`,
           cols.map((c) => row[c])
         )
+      }
+      if (table === 'companies') {
+        for (const user of snapshot.postgres.users || []) {
+          if (user.company_id != null) {
+            await client.query(`UPDATE users SET company_id = $1 WHERE id = $2`, [user.company_id, user.id])
+          }
+        }
       }
       // Keep the id counters ahead of the restored rows.
       await client.query(

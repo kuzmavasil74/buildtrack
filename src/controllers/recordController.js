@@ -5,6 +5,7 @@ import path from 'path'
 import { pool } from '../config/postgres.js'
 import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
 import { verifyCrewOwnership } from '../utils/verifyCrewOwnership.js'
+import { editableRecordFilter } from '../utils/permissions.js'
 import { getPdfStrings, LOCALE_MAP } from '../i18n/pdf.js'
 import { parseRecordBody } from '../utils/parseRecordBody.js'
 import { applyDateRange } from '../utils/dateRange.js'
@@ -20,7 +21,7 @@ const __dirname = path.dirname(__filename)
 export const getWorkerDirectory = async (req, res) => {
   try {
     const rows = await DailyRecord.aggregate([
-      { $match: { userId: req.user.id } },
+      { $match: { companyId: req.user.companyId } },
       { $sort: { date: -1 } },
       { $unwind: '$entries' },
       { $group: { _id: '$entries.name', rate: { $first: '$entries.rate' } } },
@@ -36,23 +37,23 @@ export const getWorkerDirectory = async (req, res) => {
 
 export const createRecord = async (req, res) => {
   try {
-    const userId = req.user.id
+    const { id: userId, companyId } = req.user
     const { fields, error } = parseRecordBody(req.body)
     if (error) return res.status(400).json({ message: error })
 
-    const ownsSite = await verifySiteOwnership(fields.siteId, userId)
+    const ownsSite = await verifySiteOwnership(fields.siteId, companyId)
     if (!ownsSite) {
       return res.status(403).json({ message: 'Invalid site' })
     }
 
     if (fields.crewId) {
-      const ownsCrew = await verifyCrewOwnership(fields.crewId, userId)
+      const ownsCrew = await verifyCrewOwnership(fields.crewId, companyId)
       if (!ownsCrew) {
         return res.status(403).json({ message: 'Invalid crew' })
       }
     }
 
-    const record = await DailyRecord.create({ ...fields, userId })
+    const record = await DailyRecord.create({ ...fields, userId, companyId })
     res.status(201).json({ message: 'Record created successfully', record })
   } catch (error) {
     console.error('CREATE RECORD ERROR:', error)
@@ -61,9 +62,8 @@ export const createRecord = async (req, res) => {
 }
 export const getRecords = async (req, res) => {
   try {
-    const userId = req.user.id
     const { siteId, from, to } = req.query
-    const filter = { userId }
+    const filter = { companyId: req.user.companyId }
     if (siteId) filter.siteId = Number(siteId)
     applyDateRange(filter, from, to)
     const records = await DailyRecord.find(filter).sort({ date: -1, _id: -1 })
@@ -75,23 +75,23 @@ export const getRecords = async (req, res) => {
 export const updateRecord = async (req, res) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
+    const { companyId } = req.user
     const { fields, error } = parseRecordBody(req.body)
     if (error) return res.status(400).json({ message: error })
 
-    const ownsSite = await verifySiteOwnership(fields.siteId, userId)
+    const ownsSite = await verifySiteOwnership(fields.siteId, companyId)
     if (!ownsSite) {
       return res.status(403).json({ message: 'Invalid site' })
     }
 
     if (fields.crewId) {
-      const ownsCrew = await verifyCrewOwnership(fields.crewId, userId)
+      const ownsCrew = await verifyCrewOwnership(fields.crewId, companyId)
       if (!ownsCrew) {
         return res.status(403).json({ message: 'Invalid crew' })
       }
     }
 
-    const record = await DailyRecord.findOneAndUpdate({ _id: id, userId }, fields, {
+    const record = await DailyRecord.findOneAndUpdate(editableRecordFilter(req.user, id), fields, {
       new: true,
     })
 
@@ -105,18 +105,18 @@ export const updateRecord = async (req, res) => {
     res.status(500).json({ message: 'Error updating record' })
   }
 }
-const getCrewNames = async (userId) => {
-  const { rows } = await pool.query(`SELECT id, name FROM crews WHERE user_id = $1`, [userId])
+const getCrewNames = async (companyId) => {
+  const { rows } = await pool.query(`SELECT id, name FROM crews WHERE company_id = $1`, [companyId])
   return new Map(rows.map((row) => [row.id, row.name]))
 }
 
 export const generateReport = async (req, res) => {
   try {
-    const userId = req.user.id
+    const { companyId } = req.user
     const { from, to, lang } = req.query
     const strings = getPdfStrings(lang)
     const locale = LOCALE_MAP[lang] || LOCALE_MAP.uk
-    const filter = { userId }
+    const filter = { companyId }
     applyDateRange(filter, from, to)
 
     const response = await DailyRecord.find(filter).sort({ date: 1, _id: 1 })
@@ -193,7 +193,7 @@ export const generateReport = async (req, res) => {
       pdf.moveDown(0.5)
     }
 
-    const crewNames = await getCrewNames(userId)
+    const crewNames = await getCrewNames(companyId)
     const formatEntry = (e) => {
       const span = e.startTime && e.endTime ? ` (${e.startTime}–${e.endTime})` : ''
       const note = e.note ? ` — ${e.note}` : ''
@@ -242,14 +242,14 @@ const csvEscape = (value) => {
 
 export const generateCsv = async (req, res) => {
   try {
-    const userId = req.user.id
+    const { companyId } = req.user
     const { from, to } = req.query
-    const filter = { userId }
+    const filter = { companyId }
     applyDateRange(filter, from, to)
 
     const records = await DailyRecord.find(filter).sort({ date: 1, _id: 1 })
 
-    const crewNames = await getCrewNames(userId)
+    const crewNames = await getCrewNames(companyId)
     const header = [
       'date',
       'siteId',
@@ -297,9 +297,11 @@ export const generateCsv = async (req, res) => {
 }
 export const deleteRecord = async (req, res) => {
   const { id } = req.params
-  const userId = req.user.id
   try {
-    await DailyRecord.findOneAndDelete({ _id: id, userId })
+    const record = await DailyRecord.findOneAndDelete(editableRecordFilter(req.user, id))
+    if (!record) {
+      return res.status(404).json({ message: 'Record not found' })
+    }
     res.status(200).json({ message: 'Record deleted successfully' })
   } catch (error) {
     res.status(500).json({ message: 'Error deleting record' })
@@ -307,8 +309,7 @@ export const deleteRecord = async (req, res) => {
 }
 export const getMonthlyStats = async (req, res) => {
   try {
-    const userId = req.user.id
-    const records = await DailyRecord.find({ userId })
+    const records = await DailyRecord.find({ companyId: req.user.companyId })
 
     const stats = {}
 
@@ -342,20 +343,20 @@ export const getMonthlyStats = async (req, res) => {
   }
 }
 
-const buildPayroll = async (userId, from, to) => {
-  const filter = { userId }
+const buildPayroll = async (companyId, from, to) => {
+  const filter = { companyId }
   applyDateRange(filter, from, to)
 
   const records = await DailyRecord.find(filter)
   const crewsResult = await pool.query(
-    `SELECT id, name, members, member_rates FROM crews WHERE user_id = $1`,
-    [userId]
+    `SELECT id, name, members, member_rates FROM crews WHERE company_id = $1`,
+    [companyId]
   )
   return computePayroll(records, crewsResult.rows)
 }
 
-const getUserCurrency = async (userId) => {
-  const { rows } = await pool.query(`SELECT currency FROM users WHERE id = $1`, [userId])
+const getCompanyCurrency = async (companyId) => {
+  const { rows } = await pool.query(`SELECT currency FROM companies WHERE id = $1`, [companyId])
   return rows[0]?.currency || DEFAULT_CURRENCY
 }
 
@@ -363,8 +364,8 @@ export const getPayroll = async (req, res) => {
   try {
     const { from, to } = req.query
     const [payroll, currency] = await Promise.all([
-      buildPayroll(req.user.id, from, to),
-      getUserCurrency(req.user.id),
+      buildPayroll(req.user.companyId, from, to),
+      getCompanyCurrency(req.user.companyId),
     ])
     res.status(200).json({ ...payroll, currency })
   } catch (error) {
@@ -377,8 +378,8 @@ export const getPayrollCsv = async (req, res) => {
   try {
     const { from, to } = req.query
     const [{ crews, unassignedHours }, currency] = await Promise.all([
-      buildPayroll(req.user.id, from, to),
-      getUserCurrency(req.user.id),
+      buildPayroll(req.user.companyId, from, to),
+      getCompanyCurrency(req.user.companyId),
     ])
 
     const header = ['crew', 'member', 'hours', 'rate', 'wage', 'currency']

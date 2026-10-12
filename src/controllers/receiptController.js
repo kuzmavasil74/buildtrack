@@ -14,7 +14,8 @@ export const uploadReceipt = async (req, res) => {
     if (!file) return res.status(400).json({ message: 'No file provided' })
     if (!siteId) return res.status(400).json({ message: 'siteId is required' })
 
-    const ownsSite = await verifySiteOwnership(siteId, userId)
+    const { companyId } = req.user
+    const ownsSite = await verifySiteOwnership(siteId, companyId)
     if (!ownsSite) {
       return res.status(403).json({ message: 'Invalid site' })
     }
@@ -38,6 +39,7 @@ export const uploadReceipt = async (req, res) => {
     await Receipt.create({
       siteId,
       userId,
+      companyId,
       key,
       fileUrl,
       originalName: file.originalname,
@@ -52,9 +54,8 @@ export const uploadReceipt = async (req, res) => {
 
 export const getReceipts = async (req, res) => {
   try {
-    const userId = req.user.id
     const { siteId } = req.query
-    const filter = { userId }
+    const filter = { companyId: req.user.companyId }
     if (siteId) filter.siteId = Number(siteId)
     const receipts = await Receipt.find(filter).sort({ createdAt: -1 })
     res.status(200).json({ receipts: await withViewUrls(receipts) })

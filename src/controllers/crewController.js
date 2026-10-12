@@ -34,8 +34,9 @@ export const createCrew = async (req, res) => {
     const { cleanMembers, cleanRates } = normalizeMembers(members, memberRates)
 
     const crew = await pool.query(
-      `INSERT INTO crews (name, members, member_rates, user_id) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, cleanMembers, cleanRates, userId]
+      `INSERT INTO crews (name, members, member_rates, user_id, company_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [name, cleanMembers, cleanRates, userId, req.user.companyId]
     )
     res.status(201).json({ message: 'Crew created successfully', crew: crew.rows[0] })
   } catch (error) {
@@ -47,7 +48,7 @@ export const createCrew = async (req, res) => {
 export const updateCrew = async (req, res) => {
   const { id } = req.params
   const { name, members, memberRates } = req.body
-  const userId = req.user.id
+  const { companyId } = req.user
 
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ message: 'Crew name is required' })
@@ -60,8 +61,8 @@ export const updateCrew = async (req, res) => {
     const { cleanMembers, cleanRates } = normalizeMembers(members, memberRates)
 
     const crew = await pool.query(
-      `UPDATE crews SET name = $1, members = $2, member_rates = $3 WHERE id = $4 AND user_id = $5 RETURNING *`,
-      [name, cleanMembers, cleanRates, id, userId]
+      `UPDATE crews SET name = $1, members = $2, member_rates = $3 WHERE id = $4 AND company_id = $5 RETURNING *`,
+      [name, cleanMembers, cleanRates, id, companyId]
     )
     if (crew.rows.length === 0) {
       return res.status(404).json({ message: 'Crew not found' })
@@ -74,10 +75,9 @@ export const updateCrew = async (req, res) => {
 }
 
 export const getCrews = async (req, res) => {
-  const userId = req.user.id
   try {
-    const crews = await pool.query(`SELECT * FROM crews WHERE user_id = $1`, [
-      userId,
+    const crews = await pool.query(`SELECT * FROM crews WHERE company_id = $1 ORDER BY id`, [
+      req.user.companyId,
     ])
     res.status(200).json({ crews: crews.rows })
   } catch (error) {
@@ -87,11 +87,11 @@ export const getCrews = async (req, res) => {
 
 export const deleteCrew = async (req, res) => {
   const { id } = req.params
-  const userId = req.user.id
+  const { companyId } = req.user
   try {
     const result = await pool.query(
-      `DELETE FROM crews WHERE id = $1 AND user_id = $2`,
-      [id, userId]
+      `DELETE FROM crews WHERE id = $1 AND company_id = $2`,
+      [id, companyId]
     )
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Crew not found' })
@@ -99,7 +99,7 @@ export const deleteCrew = async (req, res) => {
     // Records keep their per-worker entries; only the link to the crew goes,
     // so editing an old record never submits an id the server no longer knows.
     await DailyRecord.updateMany(
-      { userId, crewId: Number(id) },
+      { companyId, crewId: Number(id) },
       { $unset: { crewId: 1 } }
     )
     res.status(200).json({ message: 'Crew deleted successfully' })

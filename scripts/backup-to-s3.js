@@ -29,7 +29,7 @@ import {
   selectExpired,
 } from '../src/utils/backup.js'
 
-export const PG_TABLES = ['users', 'sites', 'crews', 'password_reset_tokens']
+export const PG_TABLES = ['users', 'companies', 'sites', 'crews', 'password_reset_tokens', 'company_invites']
 
 const listBackupKeys = async () => {
   const keys = []

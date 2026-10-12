@@ -11,6 +11,7 @@ import {
   getWorkerDirectory,
 } from '../controllers/recordController.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { requireOwner } from '../utils/permissions.js'
 import express from 'express'
 const router = express.Router()
 
@@ -18,8 +19,8 @@ router.post('/', authMiddleware, createRecord)
 router.get('/', authMiddleware, getRecords)
 router.get('/report', authMiddleware, generateReport)
 router.get('/export.csv', authMiddleware, generateCsv)
-router.get('/payroll', authMiddleware, getPayroll)
-router.get('/payroll.csv', authMiddleware, getPayrollCsv)
+router.get('/payroll', authMiddleware, requireOwner, getPayroll)
+router.get('/payroll.csv', authMiddleware, requireOwner, getPayrollCsv)
 router.put('/:id', authMiddleware, updateRecord)
 router.delete('/:id', authMiddleware, deleteRecord)
 router.get('/monthly-stats', authMiddleware, getMonthlyStats)

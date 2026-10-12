@@ -1,10 +1,12 @@
 import bcrypt from 'bcrypt'
 import crypto from 'crypto'
-import { pool } from '../config/postgres.js'
+import { pool, defaultCompanyName } from '../config/postgres.js'
 import { AUTH_COOKIE_NAME, authCookieOptions } from '../config/cookie.js'
 import { sendMail } from '../utils/mailer.js'
 import { startSession } from '../utils/session.js'
 import { DEFAULT_CURRENCY, isSupportedCurrency } from '../config/currencies.js'
+import { findInvite, inviteProblem, normalizeEmail } from '../utils/invites.js'
+import { ROLES } from '../utils/permissions.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -14,7 +16,7 @@ const MIN_PASSWORD_LENGTH = 8
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000 // 1 hour
 
 export const register = async (req, res) => {
-  const { email, password } = req.body
+  const { email, password, inviteToken } = req.body
 
   if (!email || !password || !EMAIL_REGEX.test(email)) {
     return res.status(400).json({ message: 'A valid email and password are required' })
@@ -25,21 +27,56 @@ export const register = async (req, res) => {
     })
   }
 
+  const client = await pool.connect()
   try {
+    await client.query('BEGIN')
+    // An invite puts the new account straight into that company; otherwise
+    // the user starts a company of their own.
+    let invite = null
+    if (inviteToken) {
+      invite = await findInvite(inviteToken, client)
+      const problem = inviteProblem(invite)
+      if (problem) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ message: 'This invitation is no longer valid', code: 'INVITE_INVALID' })
+      }
+      if (normalizeEmail(invite.email) !== normalizeEmail(email)) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ message: 'This invitation was sent to a different email', code: 'INVITE_EMAIL_MISMATCH' })
+      }
+    }
+
     const hashPassword = await bcrypt.hash(password, 10)
-    const response = await pool.query(
-      `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
-      [email, hashPassword]
+    const { rows } = await client.query(
+      `INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id`,
+      [email, hashPassword, invite ? invite.role : ROLES.OWNER]
     )
+    const userId = rows[0].id
+    let companyId
+    if (invite) {
+      companyId = invite.company_id
+      await client.query(`UPDATE company_invites SET accepted_at = NOW() WHERE id = $1`, [invite.id])
+    } else {
+      const company = await client.query(
+        `INSERT INTO companies (name, owner_id) VALUES ($1, $2) RETURNING id`,
+        [defaultCompanyName(email), userId]
+      )
+      companyId = company.rows[0].id
+    }
+    await client.query(`UPDATE users SET company_id = $1 WHERE id = $2`, [companyId, userId])
+    await client.query('COMMIT')
     res
       .status(201)
-      .json({ message: 'User registered successfully', user: response.rows[0] })
+      .json({ message: 'User registered successfully', user: { id: userId } })
   } catch (error) {
+    await client.query('ROLLBACK')
     if (error.code === '23505') {
       return res.status(409).json({ message: 'User already exists' })
     }
     console.error('REGISTER ERROR:', error)
     res.status(500).json({ message: 'Registration failed' })
+  } finally {
+    client.release()
   }
 }
 
@@ -176,12 +213,17 @@ export const logout = async (req, res) => {
 
 export const me = async (req, res) => {
   try {
-    const result = await pool.query(`SELECT currency FROM users WHERE id = $1`, [
-      req.user.id,
+    const result = await pool.query(`SELECT name, currency FROM companies WHERE id = $1`, [
+      req.user.companyId,
     ])
+    const company = result.rows[0]
     res.status(200).json({
       id: req.user.id,
-      currency: result.rows[0]?.currency || DEFAULT_CURRENCY,
+      email: req.user.email,
+      role: req.user.role,
+      isAdmin: req.user.isAdmin,
+      company: { id: req.user.companyId, name: company?.name || '' },
+      currency: company?.currency || DEFAULT_CURRENCY,
     })
   } catch (error) {
     console.error('ME ERROR:', error)
@@ -189,15 +231,16 @@ export const me = async (req, res) => {
   }
 }
 
+// Payroll currency is a company setting, so only the owner changes it.
 export const updateCurrency = async (req, res) => {
   const { currency } = req.body
   if (!isSupportedCurrency(currency)) {
     return res.status(400).json({ message: 'Unsupported currency' })
   }
   try {
-    await pool.query(`UPDATE users SET currency = $1 WHERE id = $2`, [
+    await pool.query(`UPDATE companies SET currency = $1 WHERE id = $2`, [
       currency,
-      req.user.id,
+      req.user.companyId,
     ])
     res.status(200).json({ currency })
   } catch (error) {
