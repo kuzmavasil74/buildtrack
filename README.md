@@ -68,6 +68,7 @@ npm test
 | `NODE_ENV` | prod | `production` turns on secure cookies and proxy trust. |
 | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | for receipts | |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | optional | Without SMTP reset and invitation links are printed to the server log (the owner also gets the invitation link to share by hand). |
+| `OPEN_REGISTRATION` | optional | `true` lets anyone sign up and start a company; otherwise only invitation links can create accounts. |
 | `ADMIN_EMAILS` | optional | Comma-separated emails that may open `/admin` (site-wide user stats). |
 
 ## API

@@ -15,8 +15,16 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD_LENGTH = 8
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000 // 1 hour
 
+// Sign-up is by invitation only unless OPEN_REGISTRATION=true, so only people
+// a company owner invited can create accounts.
+export const isRegistrationOpen = (value = process.env.OPEN_REGISTRATION) => value === 'true'
+
 export const register = async (req, res) => {
   const { email, password, inviteToken } = req.body
+
+  if (!inviteToken && !isRegistrationOpen()) {
+    return res.status(403).json({ message: 'Registration is by invitation only', code: 'REGISTRATION_CLOSED' })
+  }
 
   if (!email || !password || !EMAIL_REGEX.test(email)) {
     return res.status(400).json({ message: 'A valid email and password are required' })
