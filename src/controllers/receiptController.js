@@ -3,6 +3,7 @@ import { s3Client, BUCKET_NAME } from '../config/s3.js'
 import { v4 as uuidv4 } from 'uuid'
 import Receipt from '../models/Receipt.js'
 import { verifySiteOwnership } from '../utils/verifySiteOwnership.js'
+import { withViewUrls } from '../utils/receiptUrl.js'
 
 export const uploadReceipt = async (req, res) => {
   try {
@@ -56,7 +57,7 @@ export const getReceipts = async (req, res) => {
     const filter = { userId }
     if (siteId) filter.siteId = Number(siteId)
     const receipts = await Receipt.find(filter).sort({ createdAt: -1 })
-    res.status(200).json({ receipts })
+    res.status(200).json({ receipts: await withViewUrls(receipts) })
   } catch (error) {
     res.status(500).json({ message: 'Error fetching receipts' })
   }

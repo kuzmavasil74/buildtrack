@@ -76,7 +76,7 @@ All routes except auth need the session cookie.
 | `GET /records/payroll?from&to`, `/records/payroll.csv` | |
 | `GET /records/report?from&to&lang`, `/records/export.csv` | PDF / CSV |
 | `GET /records/monthly-stats`, `/records/worker-directory` | |
-| `POST /receipts/upload`, `GET /receipts?siteId` | |
+| `POST /receipts/upload`, `GET /receipts?siteId` | each receipt carries a `viewUrl` signed for 1 hour (the bucket is private) |
 
 ## Tests and CI
 
